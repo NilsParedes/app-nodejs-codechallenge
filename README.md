@@ -1,82 +1,127 @@
-# Yape Code Challenge :rocket:
+# Instrucciones para ejecutar el proyecto
 
-Our code challenge will let you marvel us with your Jedi coding skills :smile:. 
+## Requisitos previos
 
-Don't forget that the proper way to submit your work is to fork the repo and create a PR :wink: ... have fun !!
+- Node.js
+- Docker y Docker Compose
+- Npm
 
-- [Problem](#problem)
-- [Tech Stack](#tech_stack)
-- [Send us your challenge](#send_us_your_challenge)
+## Arquitectura del sistema
 
-# Problem
+El sistema utiliza una arquitectura de microservicios con comunicación asíncrona a través de Kafka:
 
-Every time a financial transaction is created it must be validated by our anti-fraud microservice and then the same service sends a message back to update the transaction status.
-For now, we have only three transaction statuses:
+1. **Transaction-service**:
+   - Implementa un patrón CQRS (Command Query Responsibility Segregation)
+   - Expone una API GraphQL para crear y consultar transacciones
+   - Almacena datos en PostgreSQL usando TypeORM
+   - Publica eventos de transacciones creadas a Kafka
+   - Escucha eventos de transacciones validadas desde Kafka
 
-<ol>
-  <li>pending</li>
-  <li>approved</li>
-  <li>rejected</li>  
-</ol>
+2. **Anti-fraud-service**:
+   - Escucha eventos de transacciones creadas desde Kafka
+   - Aplica reglas de negocio para validar transacciones
+   - Publica eventos de transacciones validadas a Kafka
 
-Every transaction with a value greater than 1000 should be rejected.
+3. **Infraestructura**:
+   - PostgreSQL: Base de datos relacional para almacenar transacciones
+   - Kafka: Sistema de mensajería para comunicación asíncrona entre servicios
+   - Zookeeper: Requerido por Kafka para gestión de configuración
 
-```mermaid
-  flowchart LR
-    Transaction -- Save Transaction with pending Status --> transactionDatabase[(Database)]
-    Transaction --Send transaction Created event--> Anti-Fraud
-    Anti-Fraud -- Send transaction Status Approved event--> Transaction
-    Anti-Fraud -- Send transaction Status Rejected event--> Transaction
-    Transaction -- Update transaction Status event--> transactionDatabase[(Database)]
+## Configuración de variables de entorno
+
+Cada servicio requiere su propio archivo .env. Puedes usar los archivos .env.example como plantilla:
+
+```bash
+# Para transaction-service
+cp transaction-service/.env.example transaction-service/.env
+
+# Para anti-fraud-service
+cp anti-fraud-service/.env.example anti-fraud-service/.env
 ```
 
-# Tech Stack
+## Pasos para ejecutar
 
-<ol>
-  <li>Node. You can use any framework you want (i.e. Nestjs with an ORM like TypeOrm or Prisma) </li>
-  <li>Any database</li>
-  <li>Kafka</li>    
-</ol>
+1. **Instalar dependencias**:
 
-We do provide a `Dockerfile` to help you get started with a dev environment.
+   ```bash
+   # En la carpeta transaction-service
+   cd transaction-service
+   npm install
 
-You must have two resources:
+   # En la carpeta anti-fraud-service
+   cd anti-fraud-service
+   npm install
+   ```
 
-1. Resource to create a transaction that must containt:
+2. **Iniciar servicios**:
 
-```json
-{
-  "accountExternalIdDebit": "Guid",
-  "accountExternalIdCredit": "Guid",
-  "tranferTypeId": 1,
-  "value": 120
+   ```bash
+   # Iniciar Postgres, Kafka y Zookeeper
+   docker-compose up -d
+
+   # Iniciar transaction-service
+   cd transaction-service
+   npm run start
+
+   # En otra terminal, iniciar anti-fraud-service
+   cd anti-fraud-service
+   npm run start
+   ```
+
+3. **Ejecutar seeders**:
+
+   Para cargar datos iniciales de tipos de transacción en la base de datos:
+
+   ```bash
+   # En la carpeta transaction-service
+   cd transaction-service
+   npm run seed
+   ```
+
+   Este comando creará los siguientes tipos de transacción:
+   - TRANSFER
+   - DEPOSIT
+   - PAYMENT
+   - REFUND
+   - CHARGE
+   - SUBSCRIPTION
+   - INTERNATIONAL_TRANSFER
+
+4. **Acceder a la API GraphQL**:
+
+   Una vez que los servicios estén en ejecución, puedes acceder al playground de GraphQL en:
+   
+   http://localhost:3000/graphql
+
+## Ejemplos de uso
+
+### Crear una transacción
+
+```graphql
+mutation {
+  createTransaction(input: {
+    accountExternalIdDebit: "RANDOM_UUID",
+    accountExternalIdCredit: "RANDOM_UUID",
+    transferTypeId: "UUID-GENERADO-POR-SEEDER",
+    value: 500
+  })
 }
 ```
 
-2. Resource to retrieve a transaction
+### Consultar una transacción
 
-```json
-{
-  "transactionExternalId": "Guid",
-  "transactionType": {
-    "name": ""
-  },
-  "transactionStatus": {
-    "name": ""
-  },
-  "value": 120,
-  "createdAt": "Date"
+```graphql
+query {
+  getTransaction(id: "TRANSACTION_ID") {
+    transactionExternalId
+    transactionType {
+      name
+    }
+    transactionStatus {
+      name
+    }
+    value
+    createdAt
+  }
 }
 ```
-
-## Optional
-
-You can use any approach to store transaction data but you should consider that we may deal with high volume scenarios where we have a huge amount of writes and reads for the same data at the same time. How would you tackle this requirement?
-
-You can use Graphql;
-
-# Send us your challenge
-
-When you finish your challenge, after forking a repository, you **must** open a pull request to our repository. There are no limitations to the implementation, you can follow the programming paradigm, modularization, and style that you feel is the most appropriate solution.
-
-If you have any questions, please let us know.
